@@ -1,0 +1,95 @@
+PROGRAM PLC_PRG
+VAR
+    weight1        : REAL;
+    flag           : BOOL;
+    box_small      : BOOL;
+    MATERIAL       : BOOL;
+    box_small_long : BOOL;
+    box_long       : BOOL;
+    box_HUGE       : BOOL;
+    pusher_ready   : BOOL;
+    
+    TIMER1         : TON;
+    TIMER_WEIGHT   : TON;
+    TIMER_PUSHER   : TON;
+    TRIG1          : R_TRIG;
+    COUNTER1       : CTU;
+END_VAR
+
+weight1 := (WORD_TO_REAL(IO.WORD_IN_0) / 1000.0) * 100.0;
+
+IF IO.BOOL_IN_1 THEN 
+    flag := TRUE;
+END_IF;
+
+IF NOT IO.BOOL_IN_2 OR COUNTER1.Q THEN
+    flag := FALSE;
+END_IF;
+
+TIMER1(IN := flag, PT := T#3S);
+
+IO.BOOL_OUT_0 := flag AND TIMER1.Q;
+IO.BOOL_OUT_1 := flag;
+IO.BOOL_OUT_2 := flag;
+
+IF NOT IO.BOOL_IN_3 OR (weight1 < 2.0) THEN
+    box_small      := FALSE;
+    MATERIAL       := FALSE;
+    box_small_long := FALSE;
+    box_long       := FALSE;
+    box_HUGE       := FALSE;
+    pusher_ready   := FALSE;
+ELSE
+    IF (IO.light_sens > 124) AND (IO.light_sens < 130) THEN 
+        IF (weight1 > 2.5) AND (weight1 < 4.5) THEN
+            box_small := TRUE;
+            MATERIAL  := FALSE;
+        ELSIF (weight1 > 7.0) AND (weight1 < 9.0) THEN
+            box_small := FALSE;
+            MATERIAL  := TRUE;
+        END_IF;
+    END_IF;
+
+    IF (IO.light_sens > 189) AND (IO.light_sens < 197) THEN
+        IF (weight1 > 7.0) AND (weight1 < 9.0) THEN
+            box_small_long := TRUE;
+            box_long       := FALSE;
+        ELSIF (weight1 > 9.1) AND (weight1 < 12.0) THEN 
+            box_small_long := FALSE;
+            box_long       := TRUE;
+        END_IF;
+    END_IF;
+
+    IF (IO.light_sens > 220) AND (IO.light_sens < 227) THEN
+        IF (weight1 > 13.5) AND (weight1 < 16.5) THEN
+            box_HUGE := TRUE;
+        ELSE 
+            box_HUGE := FALSE;
+        END_IF;
+    END_IF;
+END_IF;
+
+TIMER_WEIGHT(IN := IO.BOOL_IN_3, PT := T#2S);
+TIMER_PUSHER(IN := MATERIAL AND IO.BOOL_IN_2, PT := T#1S);
+
+IF TIMER_PUSHER.Q AND IO.BOOL_IN_5 AND IO.BOOL_IN_2 THEN
+    pusher_ready := TRUE; 
+END_IF;
+
+IF NOT IO.BOOL_IN_2 OR IO.BOOL_IN_6 THEN
+    pusher_ready := FALSE; 
+END_IF;
+
+IO.BOOL_OUT_3 := pusher_ready;
+IO.BOOL_OUT_4 := pusher_ready;
+
+IO.BOOL_OUT_5 := flag AND (NOT IO.BOOL_IN_3 OR (TIMER_WEIGHT.Q AND NOT MATERIAL)) AND NOT IO.BOOL_IN_7;
+
+TRIG1(CLK := IO.BOOL_IN_0); 
+
+COUNTER1(
+    CU    := TRIG1.Q, 
+    RESET := IO.BOOL_IN_1, 
+    PV    := 3
+);
+END_PROGRAM
